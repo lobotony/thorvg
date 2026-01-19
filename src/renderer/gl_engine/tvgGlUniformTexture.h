@@ -29,6 +29,7 @@
 #define GL_UNIFORM_TEX_MAX_DRAWS 4096
 #define GL_UNIFORM_TEX_MAX_STOPS 16
 #define GL_UNIFORM_TEX_UNIT 7
+#define GL_UNIFORM_TEX_SLOTS 2
 
 
 struct GlColorUniformData
@@ -84,12 +85,14 @@ struct GlUniformTexture
 
     void ensure();
     void upload();
+    GLuint getTextureId() const { return textureIds[textureIndex]; }
 
     uint32_t currentRow = 0;
     uint32_t currentOffset = 0;
     Array<float> stagingBuffer;
     bool needsUpload = false;
-    GLuint textureId = 0;
+    GLuint textureIds[GL_UNIFORM_TEX_SLOTS] = {};
+    uint32_t textureIndex = 0;
 };
 
 #endif

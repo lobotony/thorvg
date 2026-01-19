@@ -280,7 +280,7 @@ void GlRenderer::drawPrimitive(GlShape& sdata, const RenderColor& c, RenderUpdat
         auto uniformTexLoc = solidTask->getProgram()->getUniformLocation("uUniformTex");
         if (uniformTexLoc >= 0 && !appended) {
             mUniformTexture.ensure();
-            solidTask->addBindResource(GlBindingResource{GL_UNIFORM_TEX_UNIT, mUniformTexture.textureId, uniformTexLoc});
+            solidTask->addBindResource(GlBindingResource{GL_UNIFORM_TEX_UNIT, mUniformTexture.getTextureId(), uniformTexLoc});
         }
 
         ++mPrepareDrawId;
@@ -356,7 +356,7 @@ void GlRenderer::drawPrimitive(GlShape& sdata, const RenderColor& c, RenderUpdat
         auto uniformTexLoc = task->getProgram()->getUniformLocation("uUniformTex");
         if (uniformTexLoc >= 0) {
             mUniformTexture.ensure();
-            task->addBindResource(GlBindingResource{GL_UNIFORM_TEX_UNIT, mUniformTexture.textureId, uniformTexLoc});
+            task->addBindResource(GlBindingResource{GL_UNIFORM_TEX_UNIT, mUniformTexture.getTextureId(), uniformTexLoc});
         }
     }
 

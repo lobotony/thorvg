@@ -31,8 +31,8 @@ GlUniformTexture::GlUniformTexture()
 
 GlUniformTexture::~GlUniformTexture()
 {
-    if (textureId) {
-        glDeleteTextures(1, &textureId);
+    if (textureIds[0] || textureIds[1]) {
+        glDeleteTextures(GL_UNIFORM_TEX_SLOTS, textureIds);
     }
 }
 
@@ -95,6 +95,8 @@ void GlUniformTexture::reset()
     currentRow = 0;
     currentOffset = 0;
     needsUpload = false;
+    // Ping-pong uniform textures across frames.
+    textureIndex = (textureIndex + 1) % GL_UNIFORM_TEX_SLOTS;
 }
 
 
@@ -250,26 +252,29 @@ void GlUniformTexture::stageRadialGradientUniforms(uint32_t drawId, const float*
 
 void GlUniformTexture::ensure()
 {
-    if (textureId) return;
+    if (textureIds[0] || textureIds[1]) return;
 
-    GL_CHECK(glGenTextures(1, &textureId));
-    GL_CHECK(glBindTexture(GL_TEXTURE_2D, textureId));
+    GL_CHECK(glGenTextures(GL_UNIFORM_TEX_SLOTS, textureIds));
 
-    GL_CHECK(glTexImage2D(
-        GL_TEXTURE_2D,
-        0,
-        GL_RGBA32F,
-        GL_UNIFORM_TEX_WIDTH,
-        GL_UNIFORM_TEX_MAX_DRAWS,
-        0,
-        GL_RGBA,
-        GL_FLOAT,
-        nullptr));
+    for (uint32_t i = 0; i < GL_UNIFORM_TEX_SLOTS; ++i) {
+        GL_CHECK(glBindTexture(GL_TEXTURE_2D, textureIds[i]));
 
-    GL_CHECK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
-    GL_CHECK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
-    GL_CHECK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
-    GL_CHECK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+        GL_CHECK(glTexImage2D(
+            GL_TEXTURE_2D,
+            0,
+            GL_RGBA32F,
+            GL_UNIFORM_TEX_WIDTH,
+            GL_UNIFORM_TEX_MAX_DRAWS,
+            0,
+            GL_RGBA,
+            GL_FLOAT,
+            nullptr));
+
+        GL_CHECK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
+        GL_CHECK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+        GL_CHECK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+        GL_CHECK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+    }
 
     GL_CHECK(glBindTexture(GL_TEXTURE_2D, 0));
 }
@@ -280,7 +285,7 @@ void GlUniformTexture::upload()
 
     ensure();
 
-    GL_CHECK(glBindTexture(GL_TEXTURE_2D, textureId));
+    GL_CHECK(glBindTexture(GL_TEXTURE_2D, textureIds[textureIndex]));
     GL_CHECK(glTexSubImage2D(
         GL_TEXTURE_2D,
         0,
