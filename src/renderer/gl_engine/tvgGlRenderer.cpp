@@ -56,10 +56,6 @@ void GlRenderer::flush()
 {
     clearDisposes();
 
-    if (mUniformTextureId) {
-        GL_CHECK(glDeleteTextures(1, &mUniformTextureId));
-        mUniformTextureId = 0;
-    }
 
     mRootTarget.reset();
 
@@ -91,52 +87,7 @@ bool GlRenderer::currentContext()
     return true;
 }
 
-void GlRenderer::ensureUniformTexture()
-{
-    if (mUniformTextureId) return;
 
-    GL_CHECK(glGenTextures(1, &mUniformTextureId));
-    GL_CHECK(glBindTexture(GL_TEXTURE_2D, mUniformTextureId));
-
-    GL_CHECK(glTexImage2D(
-        GL_TEXTURE_2D,
-        0,
-        GL_RGBA32F,
-        GL_UNIFORM_TEX_WIDTH,
-        GL_UNIFORM_TEX_MAX_DRAWS,
-        0,
-        GL_RGBA,
-        GL_FLOAT,
-        nullptr));
-
-    GL_CHECK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
-    GL_CHECK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
-    GL_CHECK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
-    GL_CHECK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-
-    GL_CHECK(glBindTexture(GL_TEXTURE_2D, 0));
-}
-
-void GlRenderer::uploadUniformTexture()
-{
-    if (!mUniformTexture.needsUpload() || mUniformTexture.getDrawCallCount() == 0) return;
-
-    ensureUniformTexture();
-
-    GL_CHECK(glBindTexture(GL_TEXTURE_2D, mUniformTextureId));
-    GL_CHECK(glTexSubImage2D(
-        GL_TEXTURE_2D,
-        0,
-        0, 0,
-        GL_UNIFORM_TEX_WIDTH,
-        mUniformTexture.getDrawCallCount(),
-        GL_RGBA,
-        GL_FLOAT,
-        mUniformTexture.getStagingData()));
-    GL_CHECK(glBindTexture(GL_TEXTURE_2D, 0));
-
-    mUniformTexture.markUploaded();
-}
 
 GlRenderer::GlRenderer() : mEffect(GlEffect(&mGpuBuffer))
 {
@@ -328,8 +279,8 @@ void GlRenderer::drawPrimitive(GlShape& sdata, const RenderColor& c, RenderUpdat
 
         auto uniformTexLoc = solidTask->getProgram()->getUniformLocation("uUniformTex");
         if (uniformTexLoc >= 0 && !appended) {
-            ensureUniformTexture();
-            solidTask->addBindResource(GlBindingResource{GL_UNIFORM_TEX_UNIT, mUniformTextureId, uniformTexLoc});
+            mUniformTexture.ensure();
+            solidTask->addBindResource(GlBindingResource{GL_UNIFORM_TEX_UNIT, mUniformTexture.textureId, uniformTexLoc});
         }
 
         ++mPrepareDrawId;
@@ -404,8 +355,8 @@ void GlRenderer::drawPrimitive(GlShape& sdata, const RenderColor& c, RenderUpdat
             color[0], color[1], color[2], color[3]);
         auto uniformTexLoc = task->getProgram()->getUniformLocation("uUniformTex");
         if (uniformTexLoc >= 0) {
-            ensureUniformTexture();
-            task->addBindResource(GlBindingResource{GL_UNIFORM_TEX_UNIT, mUniformTextureId, uniformTexLoc});
+            mUniformTexture.ensure();
+            task->addBindResource(GlBindingResource{GL_UNIFORM_TEX_UNIT, mUniformTexture.textureId, uniformTexLoc});
         }
     }
 
@@ -1132,7 +1083,7 @@ bool GlRenderer::sync()
 
     // mUniformTexture.debugDumpStagingBuffer();
 
-    uploadUniformTexture();
+    mUniformTexture.upload();
 
     auto task = mRenderPassStack.first()->endRenderPass<GlBlitTask>(mPrograms[RT_Blit], mTargetFboId);
 

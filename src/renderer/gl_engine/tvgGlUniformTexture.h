@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 - 2025 the ThorVG project. All rights reserved.
+ * Copyright (c) 2020 - 2026 the ThorVG project. All rights reserved.
 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -23,7 +23,7 @@
 #ifndef _TVG_GL_UNIFORM_TEXTURE_H_
 #define _TVG_GL_UNIFORM_TEXTURE_H_
 
-#include "tvgArray.h"
+#include "tvgGlRenderTask.h"
 
 #define GL_UNIFORM_TEX_WIDTH 16
 #define GL_UNIFORM_TEX_MAX_DRAWS 4096
@@ -52,11 +52,10 @@ struct GlGradientUniformData
     float stopColors[GL_UNIFORM_TEX_MAX_STOPS * 4];
 };
 #endif //__ENABLE_FULL_UNIFORM_TEX__
-class GlUniformTexture
+struct GlUniformTexture
 {
-public:
     GlUniformTexture();
-    ~GlUniformTexture() = default;
+    ~GlUniformTexture();
 
     uint32_t pushUniformData(const void* data, uint32_t sizeBytes);
 
@@ -65,14 +64,6 @@ public:
     uint32_t finishDrawCall();
 
     void reset();
-
-    bool needsUpload() const { return mNeedsUpload; }
-
-    void markUploaded() { mNeedsUpload = false; }
-
-    uint32_t getDrawCallCount() const { return mCurrentRow; }
-
-    uint32_t getWidth() const { return GL_UNIFORM_TEX_WIDTH; }
 
     void stageColorUniforms(uint32_t drawId, const float* matrix, float r, float g, float b, float a);
 
@@ -91,15 +82,14 @@ public:
 
     void debugDumpDrawCall(uint32_t drawId) const;
 
-    const float* getStagingData() const { return mStagingBuffer.data; }
+    void ensure();
+    void upload();
 
-    uint32_t getStagingSize() const { return mStagingBuffer.count; }
-
-private:
-    uint32_t mCurrentRow = 0;
-    uint32_t mCurrentOffset = 0;
-    Array<float> mStagingBuffer;
-    bool mNeedsUpload = false;
+    uint32_t currentRow = 0;
+    uint32_t currentOffset = 0;
+    Array<float> stagingBuffer;
+    bool needsUpload = false;
+    GLuint textureId = 0;
 };
 
 #endif

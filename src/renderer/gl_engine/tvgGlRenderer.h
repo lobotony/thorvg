@@ -207,10 +207,6 @@ private:
     void flush();
     void clearDisposes();
     bool currentContext();
-    void ensureUniformTexture();
-    void uploadUniformTexture();
-    void bindUniformTexture(uint32_t textureUnit);
-    void unbindUniformTexture();
 
     void* mDisplay = nullptr;   // EGLDisplay for EGL; unused for other app-managed contexts.
     void* mSurface = nullptr;   // EGLSurface for EGL, HDC for WGL; unused for other app-managed contexts.
@@ -223,7 +219,6 @@ private:
     GlEffect mEffect;
     Array<GlProgram*> mPrograms;
     GlUniformTexture mUniformTexture;
-    GLuint mUniformTextureId = 0;
 
     Array<GlRenderTargetPool*> mComposePool;
     Array<GlRenderTargetPool*> mBlendPool;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 - 2025 the ThorVG project. All rights reserved.
+ * Copyright (c) 2020 - 2026 the ThorVG project. All rights reserved.
 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -26,31 +26,37 @@
 
 GlUniformTexture::GlUniformTexture()
 {
-    mStagingBuffer.reserve(GL_UNIFORM_TEX_WIDTH * 4 * GL_UNIFORM_TEX_MAX_DRAWS);
+    stagingBuffer.reserve(GL_UNIFORM_TEX_WIDTH * 4 * GL_UNIFORM_TEX_MAX_DRAWS);
 }
 
+GlUniformTexture::~GlUniformTexture()
+{
+    if (textureId) {
+        glDeleteTextures(1, &textureId);
+    }
+}
 
 uint32_t GlUniformTexture::pushUniformData(const void* data, uint32_t sizeBytes)
 {
-    uint32_t drawId = mCurrentRow;
+    uint32_t drawId = currentRow;
     
-    uint32_t rowStartFloats = mCurrentRow * GL_UNIFORM_TEX_WIDTH * 4;
+    uint32_t rowStartFloats = currentRow * GL_UNIFORM_TEX_WIDTH * 4;
     uint32_t floatsNeeded = rowStartFloats + (sizeBytes / sizeof(float));
     
-    if (floatsNeeded > mStagingBuffer.count) {
-        uint32_t growBy = floatsNeeded - mStagingBuffer.count;
-        if (mStagingBuffer.reserved < floatsNeeded) {
-            mStagingBuffer.grow(growBy);
+    if (floatsNeeded > stagingBuffer.count) {
+        uint32_t growBy = floatsNeeded - stagingBuffer.count;
+        if (stagingBuffer.reserved < floatsNeeded) {
+            stagingBuffer.grow(growBy);
         }
-        memset(mStagingBuffer.data + mStagingBuffer.count, 0, growBy * sizeof(float));
-        mStagingBuffer.count = floatsNeeded;
+        memset(stagingBuffer.data + stagingBuffer.count, 0, growBy * sizeof(float));
+        stagingBuffer.count = floatsNeeded;
     }
     
-    memcpy(mStagingBuffer.data + rowStartFloats, data, sizeBytes);
+    memcpy(stagingBuffer.data + rowStartFloats, data, sizeBytes);
     
-    mCurrentRow++;
-    mCurrentOffset = 0;
-    mNeedsUpload = true;
+    currentRow++;
+    currentOffset = 0;
+    needsUpload = true;
     
     return drawId;
 }
@@ -58,37 +64,37 @@ uint32_t GlUniformTexture::pushUniformData(const void* data, uint32_t sizeBytes)
 
 void GlUniformTexture::pushAtOffset(uint32_t offset, const float* data, uint32_t count)
 {
-    uint32_t rowStartFloats = mCurrentRow * GL_UNIFORM_TEX_WIDTH * 4;
+    uint32_t rowStartFloats = currentRow * GL_UNIFORM_TEX_WIDTH * 4;
     uint32_t totalOffset = rowStartFloats + offset;
     uint32_t floatsNeeded = totalOffset + count;
     
-    if (floatsNeeded > mStagingBuffer.count) {
-        uint32_t growBy = floatsNeeded - mStagingBuffer.count;
-        if (mStagingBuffer.reserved < floatsNeeded) {
-            mStagingBuffer.grow(growBy);
+    if (floatsNeeded > stagingBuffer.count) {
+        uint32_t growBy = floatsNeeded - stagingBuffer.count;
+        if (stagingBuffer.reserved < floatsNeeded) {
+            stagingBuffer.grow(growBy);
         }
-        memset(mStagingBuffer.data + mStagingBuffer.count, 0, growBy * sizeof(float));
-        mStagingBuffer.count = floatsNeeded;
+        memset(stagingBuffer.data + stagingBuffer.count, 0, growBy * sizeof(float));
+        stagingBuffer.count = floatsNeeded;
     }
     
-    memcpy(mStagingBuffer.data + totalOffset, data, count * sizeof(float));
-    mNeedsUpload = true;
+    memcpy(stagingBuffer.data + totalOffset, data, count * sizeof(float));
+    needsUpload = true;
 }
 
 
 uint32_t GlUniformTexture::finishDrawCall()
 {
-    uint32_t drawId = mCurrentRow;
-    mCurrentRow++;
-    mCurrentOffset = 0;
+    uint32_t drawId = currentRow;
+    currentRow++;
+    currentOffset = 0;
     return drawId;
 }
 
 void GlUniformTexture::reset()
 {
-    mCurrentRow = 0;
-    mCurrentOffset = 0;
-    mNeedsUpload = false;
+    currentRow = 0;
+    currentOffset = 0;
+    needsUpload = false;
 }
 
 
@@ -105,16 +111,16 @@ void GlUniformTexture::stageColorUniforms(uint32_t drawId, const float* matrix, 
     uint32_t dataOffset = rowStartFloats + colOffset * 4;  // colOffset * 4 floats per column
     uint32_t floatsNeeded = dataOffset + 16;
     
-    if (floatsNeeded > mStagingBuffer.count) {
-        uint32_t growBy = floatsNeeded - mStagingBuffer.count;
-        if (mStagingBuffer.reserved < floatsNeeded) {
-            mStagingBuffer.grow(growBy);
+    if (floatsNeeded > stagingBuffer.count) {
+        uint32_t growBy = floatsNeeded - stagingBuffer.count;
+        if (stagingBuffer.reserved < floatsNeeded) {
+            stagingBuffer.grow(growBy);
         }
-        memset(mStagingBuffer.data + mStagingBuffer.count, 0, growBy * sizeof(float));
-        mStagingBuffer.count = floatsNeeded;
+        memset(stagingBuffer.data + stagingBuffer.count, 0, growBy * sizeof(float));
+        stagingBuffer.count = floatsNeeded;
     }
     
-    float* dst = mStagingBuffer.data + dataOffset;
+    float* dst = stagingBuffer.data + dataOffset;
     
     memcpy(dst, matrix, 12 * sizeof(float));
     
@@ -123,8 +129,8 @@ void GlUniformTexture::stageColorUniforms(uint32_t drawId, const float* matrix, 
     dst[14] = b;
     dst[15] = a;
     
-    if (row >= mCurrentRow) mCurrentRow = row + 1;
-    mNeedsUpload = true;
+    if (row >= currentRow) currentRow = row + 1;
+    needsUpload = true;
 }
 
 #ifdef __ENABLE_FULL_UNIFORM_TEX__
@@ -136,16 +142,16 @@ void GlUniformTexture::stageLinearGradientUniforms(uint32_t drawId, const float*
     uint32_t rowStartFloats = drawId * GL_UNIFORM_TEX_WIDTH * 4;
     uint32_t floatsNeeded = rowStartFloats + 120;
     
-    if (floatsNeeded > mStagingBuffer.count) {
-        uint32_t growBy = floatsNeeded - mStagingBuffer.count;
-        if (mStagingBuffer.reserved < floatsNeeded) {
-            mStagingBuffer.grow(growBy);
+    if (floatsNeeded > stagingBuffer.count) {
+        uint32_t growBy = floatsNeeded - stagingBuffer.count;
+        if (stagingBuffer.reserved < floatsNeeded) {
+            stagingBuffer.grow(growBy);
         }
-        memset(mStagingBuffer.data + mStagingBuffer.count, 0, growBy * sizeof(float));
-        mStagingBuffer.count = floatsNeeded;
+        memset(stagingBuffer.data + stagingBuffer.count, 0, growBy * sizeof(float));
+        stagingBuffer.count = floatsNeeded;
     }
     
-    float* row = mStagingBuffer.data + rowStartFloats;
+    float* row = stagingBuffer.data + rowStartFloats;
     uint32_t offset = 0;
     
     memcpy(row + offset, matrix, 12 * sizeof(float));
@@ -179,8 +185,8 @@ void GlUniformTexture::stageLinearGradientUniforms(uint32_t drawId, const float*
     
     memcpy(row + offset, stopColors, stopsToCopy * 4 * sizeof(float));
     
-    if (drawId >= mCurrentRow) mCurrentRow = drawId + 1;
-    mNeedsUpload = true;
+    if (drawId >= currentRow) currentRow = drawId + 1;
+    needsUpload = true;
 }
 
 
@@ -193,16 +199,16 @@ void GlUniformTexture::stageRadialGradientUniforms(uint32_t drawId, const float*
     uint32_t rowStartFloats = drawId * GL_UNIFORM_TEX_WIDTH * 4;
     uint32_t floatsNeeded = rowStartFloats + 120;
     
-    if (floatsNeeded > mStagingBuffer.count) {
-        uint32_t growBy = floatsNeeded - mStagingBuffer.count;
-        if (mStagingBuffer.reserved < floatsNeeded) {
-            mStagingBuffer.grow(growBy);
+    if (floatsNeeded > stagingBuffer.count) {
+        uint32_t growBy = floatsNeeded - stagingBuffer.count;
+        if (stagingBuffer.reserved < floatsNeeded) {
+            stagingBuffer.grow(growBy);
         }
-        memset(mStagingBuffer.data + mStagingBuffer.count, 0, growBy * sizeof(float));
-        mStagingBuffer.count = floatsNeeded;
+        memset(stagingBuffer.data + stagingBuffer.count, 0, growBy * sizeof(float));
+        stagingBuffer.count = floatsNeeded;
     }
     
-    float* row = mStagingBuffer.data + rowStartFloats;
+    float* row = stagingBuffer.data + rowStartFloats;
     uint32_t offset = 0;
     
     memcpy(row + offset, matrix, 12 * sizeof(float));
@@ -236,8 +242,55 @@ void GlUniformTexture::stageRadialGradientUniforms(uint32_t drawId, const float*
     
     memcpy(row + offset, stopColors, stopsToCopy * 4 * sizeof(float));
     
-    if (drawId >= mCurrentRow) mCurrentRow = drawId + 1;
-    mNeedsUpload = true;
+    if (drawId >= currentRow) currentRow = drawId + 1;
+    needsUpload = true;
 }
 
 #endif //__ENABLE_FULL_UNIFORM_TEX
+
+void GlUniformTexture::ensure()
+{
+    if (textureId) return;
+
+    GL_CHECK(glGenTextures(1, &textureId));
+    GL_CHECK(glBindTexture(GL_TEXTURE_2D, textureId));
+
+    GL_CHECK(glTexImage2D(
+        GL_TEXTURE_2D,
+        0,
+        GL_RGBA32F,
+        GL_UNIFORM_TEX_WIDTH,
+        GL_UNIFORM_TEX_MAX_DRAWS,
+        0,
+        GL_RGBA,
+        GL_FLOAT,
+        nullptr));
+
+    GL_CHECK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
+    GL_CHECK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+    GL_CHECK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+    GL_CHECK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+
+    GL_CHECK(glBindTexture(GL_TEXTURE_2D, 0));
+}
+
+void GlUniformTexture::upload()
+{
+    if (!needsUpload || currentRow == 0) return;
+
+    ensure();
+
+    GL_CHECK(glBindTexture(GL_TEXTURE_2D, textureId));
+    GL_CHECK(glTexSubImage2D(
+        GL_TEXTURE_2D,
+        0,
+        0, 0,
+        GL_UNIFORM_TEX_WIDTH,
+        currentRow,
+        GL_RGBA,
+        GL_FLOAT,
+        stagingBuffer.data));
+    GL_CHECK(glBindTexture(GL_TEXTURE_2D, 0));
+
+    needsUpload = false;
+}
