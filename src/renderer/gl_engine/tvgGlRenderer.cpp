@@ -20,15 +20,13 @@
  * SOFTWARE.
  */
 
-#include "tvgGlRenderer.h"
-
 #include <atomic>
-
 #include "tvgFill.h"
 #include "tvgGlCommon.h"
+#include "tvgGlRenderer.h"
 #include "tvgGlGpuBuffer.h"
-#include "tvgGlProgram.h"
 #include "tvgGlRenderTask.h"
+#include "tvgGlProgram.h"
 #include "tvgGlShaderSrc.h"
 
 
@@ -47,8 +45,7 @@ void GlRenderer::clearDisposes()
         mDisposed.textures.clear();
     }
 
-    ARRAY_FOREACH(p, mRenderPassStack)
-    delete (*p);
+    ARRAY_FOREACH(p, mRenderPassStack) delete(*p);
     mRenderPassStack.clear();
 
     mSolidColorBatch = {};
@@ -66,16 +63,13 @@ void GlRenderer::flush()
 
     mRootTarget.reset();
 
-    ARRAY_FOREACH(p, mComposePool)
-    delete (*p);
+    ARRAY_FOREACH(p, mComposePool) delete(*p);
     mComposePool.clear();
 
-    ARRAY_FOREACH(p, mBlendPool)
-    delete (*p);
+    ARRAY_FOREACH(p, mBlendPool) delete(*p);
     mBlendPool.clear();
 
-    ARRAY_FOREACH(p, mComposeStack)
-    delete (*p);
+    ARRAY_FOREACH(p, mComposeStack) delete(*p);
     mComposeStack.clear();
 }
 
@@ -88,10 +82,10 @@ bool GlRenderer::currentContext()
     return emscripten_webgl_make_context_current(targetContext) == 0;
 #elif defined(_WIN32) && !defined(__CYGWIN__) && defined(THORVG_GL_TARGET_GL)
     if (tvgWglGetCurrentContext() == static_cast<HGLRC>(mContext)) return true;
-    return (bool)tvgWglMakeCurrent((HDC)mSurface, static_cast<HGLRC>(mContext));
+    return (bool) tvgWglMakeCurrent((HDC)mSurface, static_cast<HGLRC>(mContext));
 #elif defined(THORVG_GL_TARGET_GLES)
     if (tvgEglGetCurrentContext() == static_cast<EGLContext>(mContext)) return true;
-    if (mDisplay && mSurface) return (bool)tvgEglMakeCurrent((EGLDisplay)mDisplay, (EGLSurface)mSurface, (EGLSurface)mSurface, (EGLContext)mContext);
+    if (mDisplay && mSurface) return (bool) tvgEglMakeCurrent((EGLDisplay)mDisplay, (EGLSurface)mSurface, (EGLSurface)mSurface, (EGLContext)mContext);
 #endif
     TVGLOG("GL_ENGINE", "Maybe missing currentContext()?");
     return true;
@@ -156,8 +150,7 @@ GlRenderer::~GlRenderer()
 
     flush();
 
-    ARRAY_FOREACH(p, mPrograms)
-    delete (*p);
+    ARRAY_FOREACH(p, mPrograms) delete(*p);
 }
 
 
@@ -165,32 +158,34 @@ void GlRenderer::initShaders()
 {
     mPrograms.reserve((int)RT_None);
 
-#if 1 // for optimization
-#define LINEAR_TOTAL_LENGTH 2831
-#define RADIAL_TOTAL_LENGTH 5315
-#define BLEND_TOTAL_LENGTH 5290
+#if 1  //for optimization
+    #define LINEAR_TOTAL_LENGTH 2831
+    #define RADIAL_TOTAL_LENGTH 5315
+    #define BLEND_TOTAL_LENGTH 5290
 #else
-#define COMMON_TOTAL_LENGTH strlen(STR_GRADIENT_FRAG_COMMON_VARIABLES) + strlen(STR_GRADIENT_FRAG_COMMON_FUNCTIONS) + 1
-#define LINEAR_TOTAL_LENGTH strlen(STR_LINEAR_GRADIENT_VARIABLES) + strlen(STR_LINEAR_GRADIENT_FUNCTIONS) + strlen(STR_LINEAR_GRADIENT_MAIN) + COMMON_TOTAL_LENGTH
-#define RADIAL_TOTAL_LENGTH strlen(STR_RADIAL_GRADIENT_VARIABLES) + strlen(STR_RADIAL_GRADIENT_FUNCTIONS) + strlen(STR_RADIAL_GRADIENT_MAIN) + COMMON_TOTAL_LENGTH
-#define BLEND_TOTAL_LENGTH strlen(BLEND_SCENE_FRAG_HEADER) + strlen(BLEND_FRAG_HSL) + strlen(COLOR_BURN_BLEND_FRAG) + 1
+    #define COMMON_TOTAL_LENGTH strlen(STR_GRADIENT_FRAG_COMMON_VARIABLES) + strlen(STR_GRADIENT_FRAG_COMMON_FUNCTIONS) + 1
+    #define LINEAR_TOTAL_LENGTH strlen(STR_LINEAR_GRADIENT_VARIABLES) + strlen(STR_LINEAR_GRADIENT_FUNCTIONS) + strlen(STR_LINEAR_GRADIENT_MAIN) + COMMON_TOTAL_LENGTH
+    #define RADIAL_TOTAL_LENGTH strlen(STR_RADIAL_GRADIENT_VARIABLES) + strlen(STR_RADIAL_GRADIENT_FUNCTIONS) + strlen(STR_RADIAL_GRADIENT_MAIN) + COMMON_TOTAL_LENGTH
+    #define BLEND_TOTAL_LENGTH strlen(BLEND_SCENE_FRAG_HEADER) + strlen(BLEND_FRAG_HSL) + strlen(COLOR_BURN_BLEND_FRAG) + 1
 #endif
 
     char linearGradientFragShader[LINEAR_TOTAL_LENGTH];
     snprintf(linearGradientFragShader, LINEAR_TOTAL_LENGTH, "%s%s%s%s%s",
-             STR_GRADIENT_FRAG_COMMON_VARIABLES,
-             STR_LINEAR_GRADIENT_VARIABLES,
-             STR_GRADIENT_FRAG_COMMON_FUNCTIONS,
-             STR_LINEAR_GRADIENT_FUNCTIONS,
-             STR_LINEAR_GRADIENT_MAIN);
+        STR_GRADIENT_FRAG_COMMON_VARIABLES,
+        STR_LINEAR_GRADIENT_VARIABLES,
+        STR_GRADIENT_FRAG_COMMON_FUNCTIONS,
+        STR_LINEAR_GRADIENT_FUNCTIONS,
+        STR_LINEAR_GRADIENT_MAIN
+    );
 
     char radialGradientFragShader[RADIAL_TOTAL_LENGTH];
     snprintf(radialGradientFragShader, RADIAL_TOTAL_LENGTH, "%s%s%s%s%s",
-             STR_GRADIENT_FRAG_COMMON_VARIABLES,
-             STR_RADIAL_GRADIENT_VARIABLES,
-             STR_GRADIENT_FRAG_COMMON_FUNCTIONS,
-             STR_RADIAL_GRADIENT_FUNCTIONS,
-             STR_RADIAL_GRADIENT_MAIN);
+        STR_GRADIENT_FRAG_COMMON_VARIABLES,
+        STR_RADIAL_GRADIENT_VARIABLES,
+        STR_GRADIENT_FRAG_COMMON_FUNCTIONS,
+        STR_RADIAL_GRADIENT_FUNCTIONS,
+        STR_RADIAL_GRADIENT_MAIN
+    );
 
     mPrograms.push(new GlProgram(COLOR_VERT_SHADER, COLOR_FRAG_SHADER));
     mPrograms.push(new GlProgram(GRADIENT_VERT_SHADER, linearGradientFragShader));
@@ -224,7 +219,7 @@ void GlRenderer::drawPrimitive(GlShape& sdata, const RenderColor& c, RenderUpdat
 {
     auto blendShape = (mBlendMethod != BlendMethod::Normal);
     auto vp = currentPass()->getViewport();
-    auto bbox = blendShape ? sdata.geometry.getBounds() : sdata.geometry.viewport;
+    auto bbox = blendShape? sdata.geometry.getBounds() : sdata.geometry.viewport;
 
     bbox.intersect(vp);
     if (bbox.invalid()) return;
@@ -345,7 +340,7 @@ void GlRenderer::drawPrimitive(GlShape& sdata, const RenderColor& c, RenderUpdat
 
     GlRenderTask* task = nullptr;
     GlRenderTarget* dstCopyFbo = nullptr;
-
+    
     if (blendShape) {
         if (mBlendPool.empty()) mBlendPool.push(new GlRenderTargetPool(surface.w, surface.h));
         dstCopyFbo = mBlendPool[0]->getRenderTarget(viewRegion);
@@ -419,7 +414,8 @@ void GlRenderer::drawPrimitive(GlShape& sdata, const RenderColor& c, RenderUpdat
             static_cast<float>(viewRegion.sx()),
             static_cast<float>(viewRegion.sy()),
             static_cast<float>(dstCopyFbo->getWidth()),
-            static_cast<float>(dstCopyFbo->getHeight())};
+            static_cast<float>(dstCopyFbo->getHeight())
+        };
         task->addBindResource(GlBindingResource{
             2,
             task->getProgram()->getUniformBlockIndex("BlendRegion"),
@@ -701,25 +697,13 @@ void GlRenderer::drawClip(Array<RenderData>& clips)
         auto loc = clipTask->getProgram()->getUniformBlockIndex("Matrix");
         auto viewOffset = mGpuBuffer.push(matrix3STD140, GL_MAT3_STD140_BYTES, true);
 
-        clipTask->addBindResource(GlBindingResource{
-            0,
-            loc,
-            mGpuBuffer.getBufferId(),
-            viewOffset,
-            GL_MAT3_STD140_BYTES,
-        });
+        clipTask->addBindResource(GlBindingResource{0, loc, mGpuBuffer.getBufferId(), viewOffset, GL_MAT3_STD140_BYTES, });
 
         auto maskTask = new GlRenderTask(mPrograms[RT_Stencil]);
 
         maskTask->setDrawDepth(clipDepths[i]);
         maskTask->addVertexLayout(GlVertexLayout{0, 2, 2 * sizeof(float), identityVertexOffset});
-        maskTask->addBindResource(GlBindingResource{
-            0,
-            loc,
-            mGpuBuffer.getBufferId(),
-            mat3Offset,
-            GL_MAT3_STD140_BYTES,
-        });
+        maskTask->addBindResource(GlBindingResource{0, loc, mGpuBuffer.getBufferId(), mat3Offset, GL_MAT3_STD140_BYTES, });
         maskTask->setDrawRange(identityIndexOffset, 6);
         maskTask->setViewport({{0, 0}, {vp.sw(), vp.sh()}});
 
@@ -755,7 +739,7 @@ void GlRenderer::endBlendingCompose(GlRenderTask* stencilTask, const Matrix& mat
 {
     auto blendPass = mRenderPassStack.last();
     mRenderPassStack.pop();
-
+    
     blendPass->setDrawDepth(currentPass()->nextDrawDepth());
 
     auto composeTask = blendPass->endRenderPass<GlComposeTask>(nullptr, currentPass()->getFboId());
@@ -781,7 +765,7 @@ void GlRenderer::endBlendingCompose(GlRenderTask* stencilTask, const Matrix& mat
         viewOffset,
         GL_MAT3_STD140_BYTES,
     });
-
+    
     auto program = getBlendProgram(mBlendMethod, BlendSource::Image);
     auto task = new GlComplexBlendTask(program, currentPass()->getFbo(), dstCopyFbo, stencilTask, composeTask);
     prepareCmpTask(task, vp, blendPass->getFboWidth(), blendPass->getFboHeight());
@@ -793,14 +777,14 @@ void GlRenderer::endBlendingCompose(GlRenderTask* stencilTask, const Matrix& mat
 
     currentPass()->addRenderTask(task);
 
-    delete (blendPass);
+    delete(blendPass);
 }
 
 
 GlProgram* GlRenderer::getBlendProgram(BlendMethod method, BlendSource source)
 {
     // custom blend shaders
-    static const char* shaderFunc[17]{
+    static const char* shaderFunc[17] {
         NORMAL_BLEND_FRAG,
         MULTIPLY_BLEND_FRAG,
         SCREEN_BLEND_FRAG,
@@ -817,27 +801,18 @@ GlProgram* GlRenderer::getBlendProgram(BlendMethod method, BlendSource source)
         SATURATION_BLEND_FRAG,
         COLOR_BLEND_FRAG,
         LUMINOSITY_BLEND_FRAG,
-        ADD_BLEND_FRAG};
+        ADD_BLEND_FRAG
+    };
 
     uint32_t methodInd = (uint32_t)method;
     uint32_t shaderInd = methodInd;
 
     switch (source) {
-        case BlendSource::Scene:
-            shaderInd += (uint32_t)RT_Blend_Scene_Normal;
-            break;
-        case BlendSource::Image:
-            shaderInd += (uint32_t)RT_Blend_Image_Normal;
-            break;
-        case BlendSource::Solid:
-            shaderInd += (uint32_t)RT_ShapeBlend_Solid_Normal;
-            break;
-        case BlendSource::LinearGradient:
-            shaderInd += (uint32_t)RT_ShapeBlend_Linear_Normal;
-            break;
-        case BlendSource::RadialGradient:
-            shaderInd += (uint32_t)RT_ShapeBlend_Radial_Normal;
-            break;
+        case BlendSource::Scene: shaderInd += (uint32_t)RT_Blend_Scene_Normal; break;
+        case BlendSource::Image: shaderInd += (uint32_t)RT_Blend_Image_Normal; break;
+        case BlendSource::Solid: shaderInd += (uint32_t)RT_ShapeBlend_Solid_Normal; break;
+        case BlendSource::LinearGradient: shaderInd += (uint32_t)RT_ShapeBlend_Linear_Normal; break;
+        case BlendSource::RadialGradient: shaderInd += (uint32_t)RT_ShapeBlend_Radial_Normal; break;
     }
 
     if (mPrograms[shaderInd]) return mPrograms[shaderInd];
@@ -908,7 +883,7 @@ void GlRenderer::prepareBlitTask(GlBlitTask* task)
 void GlRenderer::prepareCmpTask(GlRenderTask* task, const RenderRegion& vp, uint32_t cmpWidth, uint32_t cmpHeight)
 {
     const auto& passVp = currentPass()->getViewport();
-
+    
     auto taskVp = vp;
     taskVp.intersect(passVp);
 
@@ -934,11 +909,11 @@ void GlRenderer::prepareCmpTask(GlRenderTask* task, const RenderRegion& vp, uint
     float uw = static_cast<float>(w) / static_cast<float>(cmpWidth);
     float uh = static_cast<float>(h) / static_cast<float>(cmpHeight);
 
-    float vertices[4 * 4]{
-        left, top, 0.f, uh,     // left top point
-        left, bottom, 0.f, 0.f, // left bottom point
-        right, top, uw, uh,     // right top point
-        right, bottom, uw, 0.f  // right bottom point
+    float vertices[4*4] {
+        left, top,     0.f, uh,  // left top point
+        left, bottom,  0.f, 0.f, // left bottom point
+        right, top,    uw, uh,   // right top point
+        right, bottom, uw, 0.f   // right bottom point
     };
     uint32_t indices[6]{0, 1, 2, 2, 1, 3};
     uint32_t vertexOffset = mGpuBuffer.push(vertices, sizeof(vertices));
@@ -955,7 +930,7 @@ void GlRenderer::prepareCmpTask(GlRenderTask* task, const RenderRegion& vp, uint
 void GlRenderer::endRenderPass(RenderCompositor* cmp)
 {
     auto glCmp = static_cast<GlCompositor*>(cmp);
-
+    
     // setup masking and blending render pass configurations
     if ((glCmp->flags & (tvg::Blending | tvg::Masking)) == (tvg::Blending | tvg::Masking)) {
         // rearrange render tree
@@ -991,39 +966,18 @@ void GlRenderer::endRenderPass(RenderCompositor* cmp)
         mRenderPassStack.pop();
 
         GlProgram* program = nullptr;
-        switch (cmp->method) {
-            case MaskMethod::Alpha:
-                program = mPrograms[RT_MaskAlpha];
-                break;
-            case MaskMethod::InvAlpha:
-                program = mPrograms[RT_MaskAlphaInv];
-                break;
-            case MaskMethod::Luma:
-                program = mPrograms[RT_MaskLuma];
-                break;
-            case MaskMethod::InvLuma:
-                program = mPrograms[RT_MaskLumaInv];
-                break;
-            case MaskMethod::Add:
-                program = mPrograms[RT_MaskAdd];
-                break;
-            case MaskMethod::Subtract:
-                program = mPrograms[RT_MaskSub];
-                break;
-            case MaskMethod::Intersect:
-                program = mPrograms[RT_MaskIntersect];
-                break;
-            case MaskMethod::Difference:
-                program = mPrograms[RT_MaskDifference];
-                break;
-            case MaskMethod::Lighten:
-                program = mPrograms[RT_MaskLighten];
-                break;
-            case MaskMethod::Darken:
-                program = mPrograms[RT_MaskDarken];
-                break;
-            default:
-                break;
+        switch(cmp->method) {
+            case MaskMethod::Alpha: program = mPrograms[RT_MaskAlpha]; break;
+            case MaskMethod::InvAlpha: program = mPrograms[RT_MaskAlphaInv]; break;
+            case MaskMethod::Luma: program = mPrograms[RT_MaskLuma]; break;
+            case MaskMethod::InvLuma: program = mPrograms[RT_MaskLumaInv]; break;
+            case MaskMethod::Add: program = mPrograms[RT_MaskAdd]; break;
+            case MaskMethod::Subtract: program = mPrograms[RT_MaskSub]; break;
+            case MaskMethod::Intersect: program = mPrograms[RT_MaskIntersect]; break;
+            case MaskMethod::Difference: program = mPrograms[RT_MaskDifference]; break;
+            case MaskMethod::Lighten: program = mPrograms[RT_MaskLighten]; break;
+            case MaskMethod::Darken: program = mPrograms[RT_MaskDarken]; break;
+            default: break;
         }
         if (program && !selfPass->isEmpty() && !maskPass->isEmpty()) {
             auto prev_task = maskPass->endRenderPass<GlComposeTask>(nullptr, currentPass()->getFboId());
@@ -1044,8 +998,8 @@ void GlRenderer::endRenderPass(RenderCompositor* cmp)
             compose_task->setParentSize(currentPass()->getViewport().w(), currentPass()->getViewport().h());
             currentPass()->addRenderTask(compose_task);
         }
-        delete (selfPass);
-        delete (maskPass);
+        delete(selfPass);
+        delete(maskPass);
     } else if (glCmp->blendMethod != BlendMethod::Normal) {
         auto renderPass = mRenderPassStack.last();
         mRenderPassStack.pop();
@@ -1074,7 +1028,7 @@ void GlRenderer::endRenderPass(RenderCompositor* cmp)
             task->setParentSize(currentPass()->getViewport().w(), currentPass()->getViewport().h());
             currentPass()->addRenderTask(std::move(task));
         }
-        delete (renderPass);
+        delete(renderPass);
     } else {
         auto renderPass = mRenderPassStack.last();
         mRenderPassStack.pop();
@@ -1114,7 +1068,7 @@ void GlRenderer::endRenderPass(RenderCompositor* cmp)
             task->setParentSize(currentPass()->getViewport().w(), currentPass()->getViewport().h());
             currentPass()->addRenderTask(std::move(task));
         }
-        delete (renderPass);
+        delete(renderPass);
     }
 }
 
@@ -1134,7 +1088,7 @@ bool GlRenderer::clear()
 
 bool GlRenderer::target(void* display, void* surface, void* context, int32_t id, uint32_t w, uint32_t h, ColorSpace cs)
 {
-    // assume the context zero is invalid
+    //assume the context zero is invalid
     if (!context || w == 0 || h == 0) return false;
 
     if (mContext) currentContext();
@@ -1162,7 +1116,7 @@ bool GlRenderer::target(void* display, void* surface, void* context, int32_t id,
 
 bool GlRenderer::sync()
 {
-    // nothing to be done.
+    //nothing to be done.
     if (mRenderPassStack.empty()) return true;
 
     currentContext();
@@ -1198,8 +1152,8 @@ bool GlRenderer::sync()
 
     clearDisposes();
 
-    // Reset clear buffer flag to default (false) after use.
-    mClearBuffer = false;
+    // Reset clear buffer flag to default (false) after use.    
+    mClearBuffer = false; 
 
     mUniformTexture.reset();
 
@@ -1218,7 +1172,7 @@ bool GlRenderer::bounds(RenderData data, Point* pt4, const Matrix& m)
             bbox.init();
             auto& vertexes = sdata->geometry.stroke.vertex;
             for (uint32_t i = 0; i < vertexes.count / 2; i++) {
-                Point vert = Point{vertexes[i * 2 + 0], vertexes[i * 2 + 1]} * m;
+                Point vert = Point{vertexes[i*2+0], vertexes[i*2+1]} * m;
                 bbox.min = min(bbox.min, vert);
                 bbox.max = max(bbox.max, vert);
             }
@@ -1282,8 +1236,8 @@ bool GlRenderer::beginComposite(RenderCompositor* cmp, MaskMethod method, uint8_
     glCmp->blendMethod = mBlendMethod;
 
     uint32_t index = mRenderPassStack.count - 1;
-    if (index >= mComposePool.count) mComposePool.push(new GlRenderTargetPool(surface.w, surface.h));
-
+    if (index >= mComposePool.count) mComposePool.push( new GlRenderTargetPool(surface.w, surface.h));
+    
     if (glCmp->bbox.valid()) mRenderPassStack.push(new GlRenderPass(mComposePool[index]->getRenderTarget(glCmp->bbox)));
     else mRenderPassStack.push(new GlRenderPass(nullptr));
 
@@ -1297,14 +1251,14 @@ bool GlRenderer::endComposite(RenderCompositor* cmp)
     if (mComposeStack.last() != cmp) return false;
 
     // end current render pass;
-    auto curCmp = mComposeStack.last();
+    auto curCmp  = mComposeStack.last();
     mComposeStack.pop();
 
     assert(cmp == curCmp);
 
     endRenderPass(curCmp);
 
-    delete (curCmp);
+    delete(curCmp);
 
     return true;
 }
@@ -1485,7 +1439,7 @@ void GlRenderer::dispose(RenderData data)
 {
     auto sdata = static_cast<GlShape*>(data);
 
-    // dispose the non thread-safety resources on clearDisposes() call
+    //dispose the non thread-safety resources on clearDisposes() call
     if (sdata->texId) {
         ScopedLock lock(mDisposed.key);
         mDisposed.textures.push(sdata->texId);
@@ -1516,7 +1470,7 @@ static GLuint _genTexture(RenderSurface* image)
 
 RenderData GlRenderer::prepare(RenderSurface* image, RenderData data, const Matrix& transform, Array<RenderData>& clips, uint8_t opacity, RenderUpdateFlag flags)
 {
-    // TODO: redefine GlImage.
+    //TODO: redefine GlImage.
     auto sdata = static_cast<GlShape*>(data);
     if (!sdata) sdata = new GlShape;
     sdata->validFill = false;
@@ -1564,12 +1518,12 @@ RenderData GlRenderer::prepare(const RenderShape& rshape, RenderData data, const
     sdata->opacity = opacity;
 
     if (flags & RenderUpdateFlag::Path) sdata->geometry = GlGeometry();
-
+    
     sdata->geometry.matrix = transform;
     sdata->geometry.viewport = vport;
     if (flags & (RenderUpdateFlag::Path | RenderUpdateFlag::Transform)) sdata->geometry.prepare(rshape);
-
-    // TODO: Please precisely update tessellation not to update only if the color is changed.
+    
+    //TODO: Please precisely update tessellation not to update only if the color is changed.
     if (flags & (RenderUpdateFlag::Color | RenderUpdateFlag::Gradient | RenderUpdateFlag::Transform | RenderUpdateFlag::Path)) {
         sdata->validFill = false;
         float opacityMultiplier = 1.0f;
@@ -1579,7 +1533,7 @@ RenderData GlRenderer::prepare(const RenderShape& rshape, RenderData data, const
         }
     }
 
-    // TODO: Please precisely update tessellation not to update only if the color is changed.
+    //TODO: Please precisely update tessellation not to update only if the color is changed.
     if (flags & (RenderUpdateFlag::Color | RenderUpdateFlag::Stroke | RenderUpdateFlag::GradientStroke | RenderUpdateFlag::Transform | RenderUpdateFlag::Path)) {
         sdata->validStroke = false;
         if (sdata->geometry.tesselateStroke(*(sdata->rshape))) sdata->validStroke = true;
@@ -1611,13 +1565,13 @@ bool GlRenderer::postUpdate()
 
 void GlRenderer::damage(TVG_UNUSED RenderData rd, TVG_UNUSED const RenderRegion& region)
 {
-    // TODO
+    //TODO
 }
 
 
 bool GlRenderer::partial(bool disable)
 {
-    // TODO
+    //TODO
     return false;
 }
 
@@ -1664,12 +1618,12 @@ bool GlRenderer::term()
 
 GlRenderer* GlRenderer::gen(TVG_UNUSED uint32_t threads)
 {
-    // initialize engine
+    //initialize engine
     if (rendererCnt == -1) {
         if (!glInit()) {
             TVGERR("GL_ENGINE", "Failed GL initialization!");
             return nullptr;
-        }
+        }    
         rendererCnt = 0;
     }
 
