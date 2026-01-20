@@ -26,11 +26,16 @@
 #include "tvgGlRenderTask.h"
 
 #define GL_UNIFORM_TEX_WIDTH 16
-#define GL_UNIFORM_TEX_MAX_DRAWS 4096
 #define GL_UNIFORM_TEX_MAX_STOPS 16
 #define GL_UNIFORM_TEX_UNIT 7
-#define GL_UNIFORM_TEX_SLOTS 2
+#define GL_UNIFORM_TEX_SLOTS 1
 
+// Dynamic texture management constants
+#define GL_UNIFORM_TEX_DEFAULT_HEIGHT 256      // Initial texture height (power of two)
+#define GL_UNIFORM_TEX_MIN_HEIGHT 64           // Minimum texture height
+#define GL_UNIFORM_TEX_GROWTH_FACTOR 2         // Growth multiplier when resizing
+#define GL_UNIFORM_TEX_SHRINK_THRESHOLD 0.30f  // Shrink when usage below 30%
+#define GL_UNIFORM_TEX_SHRINK_FRAMES 60        // Sustained low usage frames before shrink
 
 struct GlColorUniformData
 {
@@ -84,8 +89,15 @@ struct GlUniformTexture
     void debugDumpDrawCall(uint32_t drawId) const;
 
     void ensure();
+    // TODO: PBO could enable async texture uploads on GLES3, but requires ping-pong
+    // buffers and WebGL2 lacks glMapBufferRange. Not worth the added complexity.
     void upload();
     GLuint getTextureId() const { return textureIds[textureIndex]; }
+
+    uint32_t nextPowerOfTwo(uint32_t n);
+    uint32_t computeRequiredHeight(uint32_t rows);
+    bool resizeTexture(uint32_t newHeight);
+    void updateShrinkHysteresis();
 
     uint32_t currentRow = 0;
     uint32_t currentOffset = 0;
@@ -93,6 +105,14 @@ struct GlUniformTexture
     bool needsUpload = false;
     GLuint textureIds[GL_UNIFORM_TEX_SLOTS] = {};
     uint32_t textureIndex = 0;
+
+    uint32_t textureHeight = 0;
+    uint32_t maxTextureSize = 0;
+    uint32_t peakRowsThisFrame = 0;
+    uint32_t lowUsageFrameCount = 0;
+
+    uint32_t totalGrowthCount = 0;
+    uint32_t totalShrinkCount = 0;
 };
 
 #endif

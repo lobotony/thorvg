@@ -22,16 +22,17 @@
 
 #include "tvgGlUniformTexture.h"
 #include <string.h>
+#include <algorithm>
 
 
 GlUniformTexture::GlUniformTexture()
 {
-    stagingBuffer.reserve(GL_UNIFORM_TEX_WIDTH * 4 * GL_UNIFORM_TEX_MAX_DRAWS);
+    stagingBuffer.reserve(GL_UNIFORM_TEX_WIDTH * 4 * GL_UNIFORM_TEX_DEFAULT_HEIGHT);
 }
 
 GlUniformTexture::~GlUniformTexture()
 {
-    if (textureIds[0] || textureIds[1]) {
+    if (textureIds[0] != 0) {
         glDeleteTextures(GL_UNIFORM_TEX_SLOTS, textureIds);
     }
 }
@@ -92,10 +93,15 @@ uint32_t GlUniformTexture::finishDrawCall()
 
 void GlUniformTexture::reset()
 {
+    if (currentRow > peakRowsThisFrame) {
+        peakRowsThisFrame = currentRow;
+    }
+    updateShrinkHysteresis();
+
     currentRow = 0;
     currentOffset = 0;
     needsUpload = false;
-    // Ping-pong uniform textures across frames.
+    peakRowsThisFrame = 0;
     textureIndex = (textureIndex + 1) % GL_UNIFORM_TEX_SLOTS;
 }
 
@@ -250,9 +256,49 @@ void GlUniformTexture::stageRadialGradientUniforms(uint32_t drawId, const float*
 
 #endif //__ENABLE_FULL_UNIFORM_TEX
 
-void GlUniformTexture::ensure()
+uint32_t GlUniformTexture::nextPowerOfTwo(uint32_t n)
 {
-    if (textureIds[0] || textureIds[1]) return;
+    if (n == 0) return 1;
+    n--;
+    n |= n >> 1;
+    n |= n >> 2;
+    n |= n >> 4;
+    n |= n >> 8;
+    n |= n >> 16;
+    return n + 1;
+}
+
+uint32_t GlUniformTexture::computeRequiredHeight(uint32_t rows)
+{
+    uint32_t requiredHeight = nextPowerOfTwo(rows);
+    if (textureHeight > 0) {
+        requiredHeight = std::max(requiredHeight, textureHeight * GL_UNIFORM_TEX_GROWTH_FACTOR);
+    }
+    return std::max(requiredHeight, (uint32_t)GL_UNIFORM_TEX_MIN_HEIGHT);
+}
+
+bool GlUniformTexture::resizeTexture(uint32_t newHeight)
+{
+    if (maxTextureSize == 0) {
+        GLint maxSize = 0;
+        GL_CHECK(glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxSize));
+        maxTextureSize = static_cast<uint32_t>(maxSize);
+    }
+
+    if (newHeight > maxTextureSize) {
+        TVGERR("GL_ENGINE", "Uniform texture height %u exceeds GL_MAX_TEXTURE_SIZE %u, clamping",
+               newHeight, maxTextureSize);
+        newHeight = maxTextureSize;
+    }
+
+    if (newHeight == textureHeight && textureIds[0] != 0) {
+        return true;
+    }
+
+    if (textureIds[0] != 0) {
+        GL_CHECK(glDeleteTextures(GL_UNIFORM_TEX_SLOTS, textureIds));
+        memset(textureIds, 0, sizeof(textureIds));
+    }
 
     GL_CHECK(glGenTextures(GL_UNIFORM_TEX_SLOTS, textureIds));
 
@@ -264,7 +310,7 @@ void GlUniformTexture::ensure()
             0,
             GL_RGBA32F,
             GL_UNIFORM_TEX_WIDTH,
-            GL_UNIFORM_TEX_MAX_DRAWS,
+            newHeight,
             0,
             GL_RGBA,
             GL_FLOAT,
@@ -277,13 +323,75 @@ void GlUniformTexture::ensure()
     }
 
     GL_CHECK(glBindTexture(GL_TEXTURE_2D, 0));
+
+    uint32_t oldHeight = textureHeight;
+    textureHeight = newHeight;
+
+    if (newHeight > oldHeight) {
+        totalGrowthCount++;
+        TVGLOG("GL_ENGINE", "Uniform texture grown: %u -> %u rows (growth #%u)",
+               oldHeight, newHeight, totalGrowthCount);
+    } else {
+        totalShrinkCount++;
+        TVGLOG("GL_ENGINE", "Uniform texture shrunk: %u -> %u rows (shrink #%u)",
+               oldHeight, newHeight, totalShrinkCount);
+    }
+
+    return true;
+}
+
+void GlUniformTexture::updateShrinkHysteresis()
+{
+    if (textureHeight == 0) return;
+
+    float usage = static_cast<float>(peakRowsThisFrame) / textureHeight;
+
+    if (usage < GL_UNIFORM_TEX_SHRINK_THRESHOLD) {
+        lowUsageFrameCount++;
+
+        if (lowUsageFrameCount >= GL_UNIFORM_TEX_SHRINK_FRAMES) {
+            uint32_t targetHeight = nextPowerOfTwo(peakRowsThisFrame);
+            targetHeight = std::max(targetHeight, (uint32_t)GL_UNIFORM_TEX_MIN_HEIGHT);
+
+            if (targetHeight < textureHeight / 2) {
+                resizeTexture(targetHeight);
+            }
+
+            lowUsageFrameCount = 0;
+        }
+    } else {
+        lowUsageFrameCount = 0;
+    }
+}
+
+void GlUniformTexture::ensure()
+{
+    if (maxTextureSize == 0) {
+        GLint maxSize = 0;
+        GL_CHECK(glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxSize));
+        maxTextureSize = static_cast<uint32_t>(maxSize);
+    }
+
+    if (textureIds[0] == 0) {
+        textureHeight = GL_UNIFORM_TEX_DEFAULT_HEIGHT;
+        resizeTexture(textureHeight);
+    }
 }
 
 void GlUniformTexture::upload()
 {
     if (!needsUpload || currentRow == 0) return;
 
+    if (currentRow > textureHeight) {
+        uint32_t newHeight = computeRequiredHeight(currentRow);
+        resizeTexture(newHeight);
+    }
+
     ensure();
+
+    if (currentRow > peakRowsThisFrame) {
+        peakRowsThisFrame = currentRow;
+    }
 
     GL_CHECK(glBindTexture(GL_TEXTURE_2D, textureIds[textureIndex]));
     GL_CHECK(glTexSubImage2D(

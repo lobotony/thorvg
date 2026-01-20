@@ -83,7 +83,7 @@ bool GlRenderer::currentContext()
     if (tvgEglGetCurrentContext() == static_cast<EGLContext>(mContext)) return true;
     if (mDisplay && mSurface) return (bool) tvgEglMakeCurrent((EGLDisplay)mDisplay, (EGLSurface)mSurface, (EGLSurface)mSurface, (EGLContext)mContext);
 #endif
-    TVGLOG("GL_ENGINE", "Maybe missing currentContext()?");
+    // TVGLOG("GL_ENGINE", "Maybe missing currentContext()?");
     return true;
 }
 
